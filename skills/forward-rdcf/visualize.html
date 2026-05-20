@@ -1,0 +1,1162 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Forward-based Reverse DCF</title>
+<style>
+  :root {
+    --bg: #0f1419;
+    --panel: #1a1f26;
+    --panel-2: #232931;
+    --border: #2d343d;
+    --text: #e8eaed;
+    --text-dim: #9aa0a6;
+    --accent: #4a9eff;
+    --green: #3ec670;
+    --red: #ef5350;
+    --yellow: #ffb74d;
+    --blue: #5fa8d3;
+  }
+  * { box-sizing: border-box; }
+  body {
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", system-ui, sans-serif;
+    background: var(--bg);
+    color: var(--text);
+    margin: 0;
+    padding: 24px;
+    line-height: 1.5;
+  }
+  .container { max-width: 1280px; margin: 0 auto; }
+  h1 { font-size: 22px; font-weight: 600; margin: 0 0 4px; letter-spacing: -0.3px; }
+  .subtitle { color: var(--text-dim); font-size: 13px; margin-bottom: 24px; }
+  .grid { display: grid; grid-template-columns: 320px 1fr; gap: 20px; }
+  @media (max-width: 900px) { .grid { grid-template-columns: 1fr; } }
+  .card {
+    background: var(--panel);
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    padding: 18px;
+    margin-bottom: 16px;
+  }
+  .card h3 {
+    margin: 0 0 14px;
+    font-size: 13px;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+    color: var(--text-dim);
+    font-weight: 600;
+  }
+  label { display: block; font-size: 12px; color: var(--text-dim); margin: 10px 0 4px; }
+  input, select {
+    width: 100%;
+    padding: 8px 10px;
+    background: var(--panel-2);
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    color: var(--text);
+    font-size: 14px;
+    font-family: inherit;
+  }
+  input:focus { outline: none; border-color: var(--accent); }
+  .row { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 8px; }
+  .examples { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 12px; }
+  .examples button {
+    background: var(--panel-2);
+    border: 1px solid var(--border);
+    color: var(--text);
+    padding: 6px 10px;
+    border-radius: 6px;
+    cursor: pointer;
+    font-size: 12px;
+  }
+  .examples button:hover { border-color: var(--accent); }
+  .metric-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+  .metric {
+    background: var(--panel-2);
+    border-radius: 8px;
+    padding: 14px;
+    border: 1px solid var(--border);
+  }
+  .metric .label { font-size: 11px; color: var(--text-dim); text-transform: uppercase; letter-spacing: 0.5px; }
+  .metric .value { font-size: 26px; font-weight: 600; font-family: "SF Mono", Menlo, ui-monospace, monospace; margin-top: 4px; }
+  .metric .sub { font-size: 12px; color: var(--text-dim); margin-top: 2px; }
+  .metric.highlight { background: linear-gradient(135deg, #1a2942 0%, #1a1f26 100%); border-color: var(--accent); }
+  .signal {
+    padding: 14px 16px;
+    border-radius: 10px;
+    font-weight: 600;
+    font-size: 14px;
+    text-align: center;
+    margin: 16px 0;
+    border: 1px solid;
+  }
+  .signal.strong-under { background: rgba(62, 198, 112, 0.15); border-color: var(--green); color: var(--green); }
+  .signal.under { background: rgba(62, 198, 112, 0.08); border-color: rgba(62, 198, 112, 0.4); color: #4dd982; }
+  .signal.fair { background: rgba(255, 183, 77, 0.10); border-color: rgba(255, 183, 77, 0.5); color: var(--yellow); }
+  .signal.over { background: rgba(239, 83, 80, 0.08); border-color: rgba(239, 83, 80, 0.4); color: #ff7a78; }
+  .signal.strong-over { background: rgba(239, 83, 80, 0.15); border-color: var(--red); color: var(--red); }
+  .signal small { display: block; font-weight: 400; font-size: 12px; margin-top: 4px; opacity: 0.85; }
+  table { width: 100%; border-collapse: collapse; font-size: 14px; font-family: "SF Mono", Menlo, ui-monospace, monospace; }
+  th { text-align: right; padding: 6px 10px; font-size: 11px; text-transform: uppercase; color: var(--text-dim); font-weight: 600; border-bottom: 1px solid var(--border); }
+  th:first-child { text-align: left; }
+  td { padding: 8px 10px; border-bottom: 1px solid rgba(255,255,255,0.03); text-align: right; }
+  td:first-child { text-align: left; color: var(--text-dim); }
+  tr.baseline td { color: var(--accent); font-weight: 600; }
+  .yoy-row {
+    display: grid;
+    grid-template-columns: 110px 1fr 70px;
+    align-items: center;
+    gap: 10px;
+    margin: 4px 0;
+    font-size: 13px;
+    font-family: "SF Mono", Menlo, ui-monospace, monospace;
+  }
+  .yoy-row .yoy-label { color: var(--text-dim); font-size: 12px; }
+  .yoy-row .yoy-bar-cell {
+    position: relative;
+    height: 22px;
+    background: rgba(255,255,255,0.03);
+    border-radius: 4px;
+  }
+  .yoy-row .yoy-zero {
+    position: absolute;
+    left: 50%;
+    top: 0; bottom: 0;
+    width: 1px;
+    background: rgba(255,255,255,0.15);
+  }
+  .yoy-row .yoy-fill {
+    position: absolute;
+    top: 3px; bottom: 3px;
+    border-radius: 2px;
+  }
+  .yoy-row .yoy-fill.pos {
+    left: 50%;
+    background: linear-gradient(90deg, rgba(62, 198, 112, 0.5), var(--green));
+  }
+  .yoy-row .yoy-fill.neg {
+    right: 50%;
+    background: linear-gradient(270deg, rgba(239, 83, 80, 0.5), var(--red));
+  }
+  .yoy-row .yoy-value { text-align: right; font-size: 12px; }
+  .yoy-row .yoy-value.pos { color: var(--green); }
+  .yoy-row .yoy-value.neg { color: var(--red); }
+  .accel-tag {
+    display: inline-block;
+    padding: 3px 8px;
+    border-radius: 4px;
+    font-size: 10px;
+    font-weight: 700;
+    margin-left: 8px;
+    letter-spacing: 0.5px;
+  }
+  .accel-tag.up { background: rgba(62, 198, 112, 0.2); color: var(--green); }
+  .accel-tag.down { background: rgba(239, 83, 80, 0.2); color: var(--red); }
+  .accel-tag.neutral { background: rgba(255,255,255,0.08); color: var(--text-dim); }
+  .right-col-grid {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 16px;
+  }
+  @media (max-width: 900px) { .right-col-grid { grid-template-columns: 1fr; } }
+  .formula-note {
+    font-size: 11px;
+    color: var(--text-dim);
+    font-family: "SF Mono", Menlo, ui-monospace, monospace;
+    background: var(--panel-2);
+    padding: 8px 10px;
+    border-radius: 6px;
+    margin-top: 8px;
+  }
+  .ts-controls { display: flex; gap: 16px; align-items: flex-end; }
+  .ts-controls select, .ts-controls input[type=range] { width: 100%; }
+  .ts-controls input[type=range] { accent-color: var(--accent); margin-top: 4px; }
+  .ts-legend {
+    display: flex; flex-wrap: wrap; gap: 16px;
+    margin-top: 12px; font-size: 11px; color: var(--text-dim);
+  }
+  .ts-legend .legend-line {
+    display: inline-block; width: 16px; height: 2px;
+    vertical-align: middle; margin-right: 4px;
+  }
+  #ts_chart .axis-text { font-size: 10px; fill: var(--text-dim); font-family: "SF Mono", monospace; }
+  #ts_chart .grid-line { stroke: rgba(255,255,255,0.05); stroke-width: 1; }
+  #ts_chart .axis-line { stroke: rgba(255,255,255,0.2); stroke-width: 1; }
+  #ts_chart .ts-line-cagr { fill: none; stroke: var(--accent); stroke-width: 2; }
+  #ts_chart .ts-line-pe { fill: none; stroke: var(--yellow); stroke-width: 2; }
+  #ts_chart .ts-dot-cagr { fill: var(--accent); }
+  #ts_chart .ts-dot-pe { fill: var(--yellow); }
+  #ts_chart .cursor-line { stroke: var(--red); stroke-width: 1.5; stroke-dasharray: 4,2; }
+  #ts_chart .cursor-label { fill: var(--red); font-size: 11px; font-weight: 600; font-family: "SF Mono", monospace; }
+  #ts_growth_chart .axis-text { font-size: 10px; fill: var(--text-dim); font-family: "SF Mono", monospace; }
+  #ts_growth_chart .grid-line { stroke: rgba(255,255,255,0.05); stroke-width: 1; }
+  #ts_growth_chart .axis-line { stroke: rgba(255,255,255,0.2); stroke-width: 1; }
+  #ts_growth_chart .zero-line { stroke: rgba(255,255,255,0.3); stroke-width: 1; stroke-dasharray: 2,3; }
+  #ts_growth_chart .cursor-line { stroke: var(--red); stroke-width: 1.5; stroke-dasharray: 4,2; }
+  #ts_table { width: 100%; font-size: 12px; }
+  #ts_table th, #ts_table td { padding: 4px 8px; }
+  #ts_table tr.cursor-row td { background: rgba(74, 158, 255, 0.08); color: var(--accent); font-weight: 600; }
+  #ts_table tr.future-row td { opacity: 0.6; }
+</style>
+</head>
+<body>
+<div class="container">
+  <h1>Forward-based Reverse DCF</h1>
+  <div class="subtitle">Reverse-engineer what EPS growth the market is pricing in — and compare to the company's own history</div>
+
+  <div class="grid">
+    <!-- Left: Inputs -->
+    <div>
+      <div class="card">
+        <h3>Inputs</h3>
+        <label>Ticker</label>
+        <select id="ticker" onchange="onTickerChange()">
+          <option value="NVDA">NVDA</option>
+          <option value="CAT">CAT</option>
+          <option value="ISRG">ISRG</option>
+          <option value="ETN">ETN</option>
+          <option value="V">V</option>
+        </select>
+        <label>Stock Price ($)</label>
+        <input id="price" type="number" step="0.01" value="19.50" oninput="compute()"/>
+        <label>Forward 12-mo EPS ($)</label>
+        <input id="forward_eps" type="number" step="0.01" value="1.19" oninput="compute()"/>
+        <label>Historical Annual EPS (oldest first, comma-separated)</label>
+        <input id="historical_eps" value="0.41,0.27,0.50,0.99,0.17" oninput="compute()"/>
+
+        <div style="margin-top: 16px;">
+          <div class="row">
+            <div>
+              <label>IRR (%)</label>
+              <input id="irr" type="number" step="0.5" value="10" oninput="compute()"/>
+            </div>
+            <div>
+              <label>Years</label>
+              <input id="years" type="number" value="5" oninput="compute()"/>
+            </div>
+            <div>
+              <label>Exit P/E</label>
+              <input id="exit_pe" type="number" step="0.5" value="25" oninput="compute()"/>
+            </div>
+          </div>
+        </div>
+
+        <div class="examples">
+          <button onclick="loadExample('nvda_jan23')">NVDA Jan 2023</button>
+          <button onclick="loadExample('nvda_aug24')">NVDA Aug 2024</button>
+          <button onclick="loadExample('cat_now')">CAT now</button>
+          <button onclick="loadExample('v_now')">V now</button>
+        </div>
+        <div class="formula-note">implied_CAGR = (P/E × (1+IRR)^N / exitPE)^(1/N) − 1</div>
+      </div>
+    </div>
+
+    <!-- Right: Results -->
+    <div>
+      <div class="card">
+        <h3>Headline</h3>
+        <div class="metric-grid">
+          <div class="metric highlight">
+            <div class="label">Implied CAGR</div>
+            <div class="value" id="icagr">—</div>
+            <div class="sub">market's price-implied EPS growth requirement</div>
+          </div>
+          <div class="metric">
+            <div class="label">Forward P/E</div>
+            <div class="value" id="fpe">—</div>
+            <div class="sub" id="price_eps">—</div>
+          </div>
+          <div class="metric">
+            <div class="label">5y CAGR (historical)</div>
+            <div class="value" id="hist_cagr">—</div>
+            <div class="sub" id="cagrs_sub">—</div>
+          </div>
+          <div class="metric">
+            <div class="label">Recent Avg YoY</div>
+            <div class="value" id="avg_yoy">—</div>
+            <div class="sub" id="accel_sub">—</div>
+          </div>
+        </div>
+        <div class="signal" id="signal">—</div>
+      </div>
+
+      <div class="right-col-grid">
+        <div class="card">
+          <h3>YoY Growth Trajectory</h3>
+          <div id="yoy_chart"></div>
+        </div>
+        <div class="card">
+          <h3>Exit P/E Sensitivity</h3>
+          <table>
+            <thead><tr><th>Exit P/E</th><th>Implied CAGR</th></tr></thead>
+            <tbody id="sensitivity"></tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Time-series chart -->
+  <div class="card" style="margin-top: 20px;">
+    <h3>Time-Series — Implied CAGR &amp; Forward P/E per Quarter</h3>
+    <div class="ts-controls">
+      <div>
+        <label>Dataset</label>
+        <select id="ts_dataset" onchange="onDatasetChange()">
+          <option value="NVDA">NVDA (FY24-FY27)</option>
+          <option value="CAT">CAT (2022-2027)</option>
+          <option value="ISRG">ISRG (Q1 2020-Q1 2027)</option>
+          <option value="ETN">ETN (Q1 2020-Q1 2027)</option>
+          <option value="custom">Custom (paste CSV)</option>
+        </select>
+      </div>
+      <div style="flex: 1;">
+        <label>Cursor — "you are at quarter": <span id="cursor_label" style="color: var(--accent);">—</span></label>
+        <input type="range" id="cursor_slider" min="0" max="0" step="1" value="0" oninput="renderTimeSeries()"/>
+      </div>
+    </div>
+    <div id="custom_csv_box" style="display:none; margin-top: 10px;">
+      <label>Paste CSV (header: q,date,price,eps — oldest first):</label>
+      <textarea id="custom_csv" rows="6" style="width:100%; background: var(--panel-2); color: var(--text); border: 1px solid var(--border); padding: 8px; border-radius: 6px; font-family: ui-monospace, monospace; font-size: 12px;"
+placeholder="Q1 FY24,2023-05-24,39,0.082
+Q2 FY24,2023-08-23,47,0.248
+..."></textarea>
+      <button onclick="parseCustomCsv()" style="margin-top:6px; background: var(--accent); color: white; border: none; padding: 6px 12px; border-radius: 6px; cursor: pointer;">Load CSV</button>
+    </div>
+    <div class="ts-legend">
+      <span class="legend-item"><span class="legend-line" style="background: #4a9eff;"></span> Implied CAGR (NTM real, T+1..T+4)</span>
+      <span class="legend-item"><span class="legend-line" style="background: #a5cfff; border: 1px dashed #a5cfff;"></span> Implied CAGR (NTM consensus)</span>
+      <span class="legend-item"><span class="legend-line" style="background: #c084fc;"></span> Implied CAGR (FY+1 real, T+5..T+8) — far-forward</span>
+      <span class="legend-item"><span class="legend-line" style="background: #ffb74d;"></span> Forward EPS (NTM real) — right axis $</span>
+      <span class="legend-item"><span class="legend-line" style="background: #ffe0a8; border: 1px dashed #ffe0a8;"></span> Forward EPS (NTM consensus)</span>
+      <span class="legend-item">━ solid before cursor | ┄ dashed after</span>
+    </div>
+    <svg id="ts_chart" width="100%" height="380" style="display: block; margin-top: 8px;"></svg>
+    <div class="ts-legend" style="margin-top: 16px;">
+      <span class="legend-item"><span class="legend-line" style="background: #4dd982;"></span> EPS YoY growth (quarterly EPS vs same quarter 1 year ago)</span>
+      <span class="legend-item"><span class="legend-line" style="background: #c084fc;"></span> ΔΔ growth (acceleration: change in YoY growth)</span>
+    </div>
+    <svg id="ts_growth_chart" width="100%" height="220" style="display: block; margin-top: 4px;"></svg>
+    <div id="ts_table_container" style="margin-top: 12px; overflow-x: auto;">
+      <table id="ts_table">
+        <thead><tr><th>Quarter</th><th>Date</th><th>Price</th><th>EPS (Q)</th><th>Cons (Q)</th><th>NTM real</th><th>NTM cons</th><th title="iCAGR using NTM (T+1..T+4)">iCAGR NTM</th><th title="iCAGR using NTM consensus">iCAGR cons</th><th title="iCAGR using FY+1 (T+5..T+8) — far-forward run-rate, less smoothing of acceleration/deceleration">iCAGR FY+1</th><th title="Trailing realized EPS CAGR (TTM-based)">Realized CAGR</th><th title="NTM iCAGR minus Realized">Δ (Impl − Real)</th></tr></thead>
+        <tbody id="ts_tbody"></tbody>
+      </table>
+    </div>
+  </div>
+</div>
+
+<script>
+const EXAMPLES = {
+  nvda_jan23: { ticker: "NVDA", price: 19.50, forward_eps: 1.19, historical_eps: "0.41,0.27,0.50,0.99,0.17", irr: 10, years: 5, exit_pe: 25 },
+  nvda_aug24: { ticker: "NVDA", price: 125, forward_eps: 3.51, historical_eps: "0.27,0.50,0.99,0.17,1.19", irr: 10, years: 5, exit_pe: 25 },
+  cat_now:    { ticker: "CAT", price: 907, forward_eps: 22.76, historical_eps: "10.81,13.84,21.21,21.90,19.06", irr: 10, years: 5, exit_pe: 25 },
+  v_now:      { ticker: "V", price: 325.75, forward_eps: 13.10, historical_eps: "5.91,7.50,8.77,10.05,11.47", irr: 10, years: 5, exit_pe: 25 },  // V FY21-FY25 non-GAAP; forward FY26 non-GAAP consensus
+};
+
+// Default "current state" preset per ticker — loaded when dropdown changes
+const TICKER_PRESETS = {
+  NVDA: { price: 226, forward_eps: 5.92, historical_eps: "0.99,0.17,1.19,2.94,4.90" },  // FY22-FY26 annual
+  CAT:  { price: 907, forward_eps: 22.76, historical_eps: "10.81,13.84,21.21,21.90,19.06" },
+  ISRG: { price: 457.61, forward_eps: 10.41, historical_eps: "4.66,3.65,5.03,6.42,7.87" },  // 2021-2025 annual GAAP diluted (split-adj)
+  ETN:  { price: 431.82, forward_eps: 13.34, historical_eps: "5.34,6.15,8.02,9.50,10.46" },  // 2021-2025 annual GAAP diluted
+  V:    { price: 325.75, forward_eps: 13.10, historical_eps: "5.91,7.50,8.77,10.05,11.47" },  // FY21-FY25 non-GAAP adjusted diluted (FY ends Sept 30); forward FY26 non-GAAP consensus
+};
+
+function onTickerChange() {
+  const t = document.getElementById('ticker').value;
+  const preset = TICKER_PRESETS[t];
+  if (preset) {
+    document.getElementById('price').value = preset.price;
+    document.getElementById('forward_eps').value = preset.forward_eps;
+    document.getElementById('historical_eps').value = preset.historical_eps;
+  }
+  // Sync time-series dataset to same ticker if available
+  const tsDropdown = document.getElementById('ts_dataset');
+  if (tsDropdown && QUARTERLY_DATA[t]) {
+    tsDropdown.value = t;
+    onDatasetChange();
+  }
+  compute();
+}
+
+function loadExample(key) {
+  const ex = EXAMPLES[key];
+  document.getElementById('ticker').value = ex.ticker;
+  document.getElementById('price').value = ex.price;
+  document.getElementById('forward_eps').value = ex.forward_eps;
+  document.getElementById('historical_eps').value = ex.historical_eps;
+  document.getElementById('irr').value = ex.irr;
+  document.getElementById('years').value = ex.years;
+  document.getElementById('exit_pe').value = ex.exit_pe;
+  // Sync time-series dataset too
+  const tsDropdown = document.getElementById('ts_dataset');
+  if (tsDropdown && QUARTERLY_DATA[ex.ticker]) {
+    tsDropdown.value = ex.ticker;
+    onDatasetChange();
+  }
+  compute();
+}
+
+function impliedCagr(price, fwdEps, irr, n, exitPe) {
+  if (fwdEps <= 0 || n <= 0) return NaN;
+  const fpe = price / fwdEps;
+  const mult = fpe * Math.pow(1 + irr, n) / exitPe;
+  if (mult <= 0) return -Infinity;
+  return Math.pow(mult, 1/n) - 1;
+}
+
+function safeCagr(start, end, n) {
+  if (start <= 0 || end <= 0 || n <= 0) return NaN;
+  return Math.pow(end / start, 1/n) - 1;
+}
+
+function fmtPct(x, signed = true, digits = 1) {
+  if (isNaN(x) || !isFinite(x)) return "n/a";
+  const sign = signed && x >= 0 ? "+" : "";
+  return `${sign}${(x*100).toFixed(digits)}%`;
+}
+
+function compute() {
+  const price = parseFloat(document.getElementById('price').value);
+  const fwdEps = parseFloat(document.getElementById('forward_eps').value);
+  const histStr = document.getElementById('historical_eps').value;
+  const hist = histStr.split(',').map(s => parseFloat(s.trim())).filter(x => !isNaN(x));
+  const irr = parseFloat(document.getElementById('irr').value) / 100;
+  const years = parseInt(document.getElementById('years').value);
+  const exitPe = parseFloat(document.getElementById('exit_pe').value);
+  const ticker = document.getElementById('ticker').value;
+  document.title = `${ticker} — Forward RDCF`;
+
+  if (isNaN(price) || isNaN(fwdEps) || isNaN(irr) || isNaN(years) || isNaN(exitPe)) return;
+
+  const fpe = price / fwdEps;
+  const icagr = impliedCagr(price, fwdEps, irr, years, exitPe);
+
+  document.getElementById('fpe').textContent = fpe.toFixed(1) + 'x';
+  document.getElementById('icagr').textContent = fmtPct(icagr);
+  document.getElementById('price_eps').textContent = `$${price.toFixed(2)} / $${fwdEps.toFixed(2)} fwd EPS`;
+
+  // Historical analysis
+  const allEps = [...hist, fwdEps];
+  const yoy = [];
+  for (let i = 1; i < allEps.length; i++) {
+    if (allEps[i-1] > 0) {
+      yoy.push((allEps[i] - allEps[i-1]) / allEps[i-1]);
+    } else {
+      yoy.push(NaN);
+    }
+  }
+
+  const trailingCagrs = {};
+  for (const w of [1, 2, 3, 5]) {
+    if (w <= allEps.length - 1) {
+      trailingCagrs[w] = safeCagr(allEps[allEps.length-1-w], allEps[allEps.length-1], w);
+    }
+  }
+  const hist5 = trailingCagrs[5] !== undefined ? trailingCagrs[5] : trailingCagrs[Math.max(...Object.keys(trailingCagrs).map(Number))];
+  document.getElementById('hist_cagr').textContent = fmtPct(hist5);
+  document.getElementById('cagrs_sub').textContent = `1y ${fmtPct(trailingCagrs[1])} · 2y ${fmtPct(trailingCagrs[2])} · 3y ${fmtPct(trailingCagrs[3])}`;
+
+  const validYoy = yoy.filter(g => !isNaN(g));
+  const avgYoy = validYoy.length > 0 ? validYoy.reduce((a,b) => a+b, 0) / validYoy.length : NaN;
+  document.getElementById('avg_yoy').textContent = fmtPct(avgYoy);
+
+  let accel = NaN;
+  if (yoy.length >= 2 && !isNaN(yoy[yoy.length-1]) && !isNaN(yoy[yoy.length-2])) {
+    accel = yoy[yoy.length-1] - yoy[yoy.length-2];
+  }
+  let accelHtml = '';
+  if (!isNaN(accel)) {
+    if (accel > 0.05) accelHtml = `<span class="accel-tag up">ACCELERATING ↑</span>`;
+    else if (accel < -0.05) accelHtml = `<span class="accel-tag down">DECELERATING ↓</span>`;
+    else accelHtml = `<span class="accel-tag neutral">STABLE</span>`;
+  }
+  document.getElementById('accel_sub').innerHTML = `Δgrowth ${fmtPct(accel)} ${accelHtml}`;
+
+  // Signal — combine valuation (vs avg YoY) and trend (acceleration)
+  const delta = icagr - avgYoy;
+  const under = delta < -0.03;
+  const over = delta > 0.03;
+  const accelerating = !isNaN(accel) && accel > 0.05;
+  const decelerating = !isNaN(accel) && accel < -0.05;
+
+  let sigClass = 'fair';
+  let sigText = 'FAIR';
+  let sigSub = 'implied matches historical pace';
+
+  if (under && accelerating) {
+    sigClass = 'strong-under';
+    sigText = 'STRONG UNDERVALUED';
+    sigSub = 'priced below history AND growth accelerating — classic bottom setup';
+  } else if (under && decelerating) {
+    sigClass = 'under';
+    sigText = 'MILD UNDERVALUED';
+    sigSub = 'priced below history but growth slowing — could be justified';
+  } else if (under) {
+    sigClass = 'under';
+    sigText = 'UNDERVALUED';
+    sigSub = 'priced below historical pace';
+  } else if (over && accelerating) {
+    sigClass = 'over';
+    sigText = 'MILD OVERVALUED';
+    sigSub = 'priced above history but growth accelerating helps thesis';
+  } else if (over && decelerating) {
+    sigClass = 'strong-over';
+    sigText = 'STRONG OVERVALUED';
+    sigSub = 'priced above history AND growth decelerating — turning-point risk';
+  } else if (over) {
+    sigClass = 'over';
+    sigText = 'OVERVALUED';
+    sigSub = 'priced above historical pace';
+  } else if (accelerating) {
+    sigSub = 'implied matches history, but growth accelerating could push to bull';
+  } else if (decelerating) {
+    sigSub = 'implied matches history, but growth decelerating';
+  }
+
+  const sigEl = document.getElementById('signal');
+  sigEl.className = `signal ${sigClass}`;
+  sigEl.innerHTML = `${sigText}<small>${sigSub}</small>`;
+
+  // YoY chart
+  const maxAbs = Math.max(...validYoy.map(Math.abs), 0.1);
+  const yoyHtml = yoy.map((g, i) => {
+    const yearIdx = i + 1 - yoy.length;
+    const yearLabel = yearIdx === 0 ? 'Y-1 → Fwd' : `Y${yearIdx-1} → Y${yearIdx}`;
+    if (isNaN(g)) {
+      return `<div class="yoy-row"><div class="yoy-label">${yearLabel}</div><div class="yoy-bar-cell"><div class="yoy-zero"></div></div><div class="yoy-value">n/a</div></div>`;
+    }
+    const pct = Math.abs(g) / maxAbs * 50; // half the bar
+    const fillClass = g >= 0 ? 'pos' : 'neg';
+    const valueClass = g >= 0 ? 'pos' : 'neg';
+    const fillStyle = `width: ${pct}%;`;
+    return `<div class="yoy-row">
+      <div class="yoy-label">${yearLabel}</div>
+      <div class="yoy-bar-cell">
+        <div class="yoy-fill ${fillClass}" style="${fillStyle}"></div>
+        <div class="yoy-zero"></div>
+      </div>
+      <div class="yoy-value ${valueClass}">${fmtPct(g)}</div>
+    </div>`;
+  }).join('');
+  document.getElementById('yoy_chart').innerHTML = yoyHtml;
+
+  // Sensitivity
+  const sensHtml = [15, 18, 20, 25, 30, 35, 40, 50].map(pe => {
+    const c = impliedCagr(price, fwdEps, irr, years, pe);
+    const isBaseline = Math.abs(pe - exitPe) < 0.5;
+    return `<tr class="${isBaseline ? 'baseline' : ''}"><td>${pe}x${isBaseline ? ' ←' : ''}</td><td>${fmtPct(c)}</td></tr>`;
+  }).join('');
+  document.getElementById('sensitivity').innerHTML = sensHtml;
+}
+
+// =========================
+// Time-series chart
+// =========================
+
+const QUARTERLY_DATA = {
+  NVDA: [
+    { q: "Q4 FY22", date: "2022-02-16", price: 24.5, eps: 0.295 },
+    { q: "Q1 FY23", date: "2022-05-25", price: 18.0, eps: 0.064 },
+    { q: "Q2 FY23", date: "2022-08-24", price: 17.0, eps: 0.026 },
+    { q: "Q3 FY23", date: "2022-11-16", price: 16.5, eps: 0.027 },
+    { q: "Q4 FY23", date: "2023-02-22", price: 23.0, eps: 0.057 },
+    { q: "Q1 FY24", date: "2023-05-24", price: 39.0, eps: 0.082 },
+    { q: "Q2 FY24", date: "2023-08-23", price: 47.0, eps: 0.248 },
+    { q: "Q3 FY24", date: "2023-11-21", price: 50.0, eps: 0.371 },
+    { q: "Q4 FY24", date: "2024-02-21", price: 78.0, eps: 0.493 },
+    { q: "Q1 FY25", date: "2024-05-22", price: 95.0, eps: 0.61 },
+    { q: "Q2 FY25", date: "2024-08-28", price: 125.0, eps: 0.67 },
+    { q: "Q3 FY25", date: "2024-11-20", price: 145.0, eps: 0.78 },
+    { q: "Q4 FY25", date: "2025-02-26", price: 130.0, eps: 0.89 },
+    { q: "Q1 FY26", date: "2025-05-28", price: 140.0, eps: 0.76, consensus_eps: 0.7499 },
+    { q: "Q2 FY26", date: "2025-08-27", price: 180.0, eps: 1.08, consensus_eps: 1.0087 },
+    { q: "Q3 FY26", date: "2025-11-19", price: 200.0, eps: 1.44, consensus_eps: 1.2565 },
+    { q: "Q4 FY26", date: "2026-02-25", price: 220.0, eps: 1.62, consensus_eps: 1.5381 },
+    { q: "Q1 FY27e", date: "2026-05-20", price: 226.0, eps: 1.78 },
+  ],
+  CAT: [
+    { q: "Q1 2022", date: "2022-04-28", price: 215, eps: 2.88 },
+    { q: "Q2 2022", date: "2022-08-02", price: 180, eps: 3.18 },
+    { q: "Q3 2022", date: "2022-10-27", price: 200, eps: 3.95 },
+    { q: "Q4 2022", date: "2023-01-31", price: 250, eps: 3.86 },
+    { q: "Q1 2023", date: "2023-04-27", price: 220, eps: 4.91 },
+    { q: "Q2 2023", date: "2023-08-01", price: 280, eps: 5.55 },
+    { q: "Q3 2023", date: "2023-10-31", price: 235, eps: 5.52 },
+    { q: "Q4 2023", date: "2024-01-30", price: 306, eps: 5.23 },
+    { q: "Q1 2024", date: "2024-04-25", price: 348, eps: 5.60 },
+    { q: "Q2 2024", date: "2024-08-06", price: 330, eps: 5.99 },
+    { q: "Q3 2024", date: "2024-10-30", price: 390, eps: 5.17 },
+    { q: "Q4 2024", date: "2025-01-30", price: 370, eps: 5.14 },
+    { q: "Q1 2025", date: "2025-04-30", price: 345, eps: 4.25 },
+    { q: "Q2 2025", date: "2025-08-05", price: 420, eps: 4.72, consensus_eps: 4.90 },
+    { q: "Q3 2025", date: "2025-10-29", price: 500, eps: 4.95, consensus_eps: 4.52 },
+    { q: "Q4 2025", date: "2026-02-02", price: 650, eps: 5.16, consensus_eps: 4.71 },
+    { q: "Q1 2026", date: "2026-04-30", price: 907, eps: 5.54, consensus_eps: 4.64 },
+    // Forward consensus estimates (from yfinance eps_trend, fetched May 2026)
+    { q: "Q2 2026e", date: "2026-08-04", price: 907, eps: null, consensus_eps: 6.13 },
+    { q: "Q3 2026e", date: "2026-10-30", price: 907, eps: null, consensus_eps: 6.37 },
+    { q: "Q4 2026e", date: "2027-01-30", price: 907, eps: null, consensus_eps: 6.46 },
+    { q: "Q1 2027e", date: "2027-04-30", price: 907, eps: null, consensus_eps: 7.43 },
+  ],
+  ISRG: [
+    // EPS: SEC EDGAR GAAP diluted (2020 split-adjusted /3 for Oct 2021 3:1 split)
+    // Prices: yfinance split-adjusted close on filing date (~30 days after quarter end)
+    { q: "Q1 2020", date: "2020-04-30", price: 170.29, eps: 0.87 },
+    { q: "Q2 2020", date: "2020-07-30", price: 229.13, eps: 0.19 },
+    { q: "Q3 2020", date: "2020-10-30", price: 222.36, eps: 0.87 },
+    { q: "Q4 2020", date: "2021-01-30", price: 249.21, eps: 1.01 },
+    { q: "Q1 2021", date: "2021-04-30", price: 288.33, eps: 1.17 },
+    { q: "Q2 2021", date: "2021-07-30", price: 330.49, eps: 1.42 },
+    { q: "Q3 2021", date: "2021-10-30", price: 361.13, eps: 1.04 },
+    { q: "Q4 2021", date: "2022-01-30", price: 271.79, eps: 1.03 },
+    { q: "Q1 2022", date: "2022-04-30", price: 239.30, eps: 1.00 },
+    { q: "Q2 2022", date: "2022-07-30", price: 230.17, eps: 0.85 },
+    { q: "Q3 2022", date: "2022-10-30", price: 244.16, eps: 0.90 },
+    { q: "Q4 2022", date: "2023-01-30", price: 242.23, eps: 0.91 },
+    { q: "Q1 2023", date: "2023-04-30", price: 301.22, eps: 1.00 },
+    { q: "Q2 2023", date: "2023-07-30", price: 326.53, eps: 1.18 },
+    { q: "Q3 2023", date: "2023-10-30", price: 258.49, eps: 1.16 },
+    { q: "Q4 2023", date: "2024-01-30", price: 377.29, eps: 1.69 },
+    { q: "Q1 2024", date: "2024-04-30", price: 370.62, eps: 1.51 },
+    { q: "Q2 2024", date: "2024-07-30", price: 432.69, eps: 1.46 },
+    { q: "Q3 2024", date: "2024-10-30", price: 513.77, eps: 1.56 },
+    { q: "Q4 2024", date: "2025-01-30", price: 580.18, eps: 1.89 },
+    { q: "Q1 2025", date: "2025-04-30", price: 515.80, eps: 1.92 },
+    // Q2 2025 onwards: GAAP eps + non-GAAP analyst consensus (caveat: ISRG's GAAP ≈ non-GAAP × 0.85)
+    { q: "Q2 2025", date: "2025-07-30", price: 500.51, eps: 1.81, consensus_eps: 1.92 },
+    { q: "Q3 2025", date: "2025-10-30", price: 530.02, eps: 1.95, consensus_eps: 1.99 },
+    { q: "Q4 2025", date: "2026-01-30", price: 504.22, eps: 2.20, consensus_eps: 2.27 },
+    { q: "Q1 2026", date: "2026-04-30", price: 457.61, eps: 2.28, consensus_eps: 2.11 },
+    // Forward consensus (yfinance eps_trend, May 2026, non-GAAP convention)
+    { q: "Q2 2026e", date: "2026-07-22", price: 457.61, eps: null, consensus_eps: 2.50 },
+    { q: "Q3 2026e", date: "2026-10-22", price: 457.61, eps: null, consensus_eps: 2.58 },
+    { q: "Q4 2026e", date: "2027-01-22", price: 457.61, eps: null, consensus_eps: 2.83 },
+    { q: "Q1 2027e", date: "2027-04-22", price: 457.61, eps: null, consensus_eps: 2.95 },
+  ],
+  ETN: [
+    // EPS: SEC EDGAR GAAP diluted (no split since 2020)
+    // Prices: yfinance split-adjusted close on filing date
+    { q: "Q1 2020", date: "2020-04-30", price: 75.15, eps: 1.07 },
+    { q: "Q2 2020", date: "2020-07-30", price: 85.09, eps: 0.13 },
+    { q: "Q3 2020", date: "2020-10-30", price: 94.17, eps: 1.11 },
+    { q: "Q4 2020", date: "2021-01-30", price: 107.53, eps: 1.18 },
+    { q: "Q1 2021", date: "2021-04-30", price: 131.29, eps: 1.14 },
+    { q: "Q2 2021", date: "2021-07-30", price: 145.95, eps: 1.26 },
+    { q: "Q3 2021", date: "2021-10-30", price: 152.84, eps: 1.57 },
+    { q: "Q4 2021", date: "2022-01-30", price: 145.99, eps: 1.37 },
+    { q: "Q1 2022", date: "2022-04-30", price: 135.85, eps: 1.33 },
+    { q: "Q2 2022", date: "2022-07-30", price: 139.82, eps: 1.50 },
+    { q: "Q3 2022", date: "2022-10-30", price: 142.37, eps: 1.52 },
+    { q: "Q4 2022", date: "2023-01-30", price: 153.19, eps: 1.80 },
+    { q: "Q1 2023", date: "2023-04-30", price: 159.92, eps: 1.59 },
+    { q: "Q2 2023", date: "2023-07-30", price: 195.54, eps: 1.86 },
+    { q: "Q3 2023", date: "2023-10-30", price: 190.99, eps: 2.22 },
+    { q: "Q4 2023", date: "2024-01-30", price: 242.64, eps: 2.35 },
+    { q: "Q1 2024", date: "2024-04-30", price: 309.53, eps: 2.04 },
+    { q: "Q2 2024", date: "2024-07-30", price: 280.19, eps: 2.48 },
+    { q: "Q3 2024", date: "2024-10-30", price: 335.52, eps: 2.53 },
+    { q: "Q4 2024", date: "2025-01-30", price: 321.05, eps: 2.45 },
+    { q: "Q1 2025", date: "2025-04-30", price: 289.98, eps: 2.45 },
+    // Q2 2025 onwards: GAAP eps + non-GAAP analyst consensus (gap ~15-25% for ETN)
+    { q: "Q2 2025", date: "2025-07-30", price: 385.61, eps: 2.51, consensus_eps: 2.92 },
+    { q: "Q3 2025", date: "2025-10-30", price: 379.80, eps: 2.59, consensus_eps: 3.05 },
+    { q: "Q4 2025", date: "2026-01-30", price: 349.36, eps: 2.91, consensus_eps: 3.32 },
+    { q: "Q1 2026", date: "2026-04-30", price: 431.82, eps: 2.22, consensus_eps: 2.73 },
+    // Forward consensus (yfinance eps_trend, May 2026, non-GAAP)
+    { q: "Q2 2026e", date: "2026-08-04", price: 431.82, eps: null, consensus_eps: 3.08 },
+    { q: "Q3 2026e", date: "2026-11-04", price: 431.82, eps: null, consensus_eps: 3.51 },
+    { q: "Q4 2026e", date: "2027-02-04", price: 431.82, eps: null, consensus_eps: 3.94 },
+    { q: "Q1 2027e", date: "2027-05-04", price: 431.82, eps: null, consensus_eps: 3.93 },
+  ],
+};
+
+let tsData = QUARTERLY_DATA.NVDA;
+let tsComputed = [];
+
+function computeTimeSeries(data, irr, years, exitPe) {
+  const epsOf = d => (d && d.eps != null && isFinite(d.eps)) ? d.eps : null;
+  return data.map((d, i) => {
+    const point = { ...d, i };
+    // TTM EPS — 4 trailing including this one (need all valid)
+    if (i >= 3) {
+      const t = [data[i-3], data[i-2], data[i-1], data[i]].map(epsOf);
+      if (t.every(x => x !== null)) point.ttm = t.reduce((a,b)=>a+b, 0);
+    }
+    // NTM-actual — sum of next 4 actual EPS (need all 4 valid)
+    if (i + 4 < data.length) {
+      const f = [data[i+1], data[i+2], data[i+3], data[i+4]].map(epsOf);
+      if (f.every(x => x !== null)) point.ntm = f.reduce((a,b)=>a+b, 0);
+    }
+    // Partial NTM only if we have 2-3 valid actuals (don't fake forward estimates)
+    if (point.ntm === undefined && i + 1 < data.length) {
+      const known = [];
+      for (let k = 1; k <= 4; k++) {
+        const e = epsOf(data[i+k]);
+        if (e !== null) known.push(e);
+      }
+      if (known.length >= 2 && known.length < 4) {
+        point.ntm = known.reduce((a,b)=>a+b,0) / known.length * 4;
+        point.ntm_partial = true;
+      }
+    }
+    // NTM-consensus — sum of next 4 consensus EPS (where all 4 have consensus values)
+    const consensus_quarters = [];
+    for (let k = 1; k <= 4; k++) {
+      if (data[i+k] && data[i+k].consensus_eps !== undefined && data[i+k].consensus_eps !== null) {
+        consensus_quarters.push(data[i+k].consensus_eps);
+      }
+    }
+    if (consensus_quarters.length === 4) {
+      point.ntm_consensus = consensus_quarters.reduce((a,b)=>a+b,0);
+    } else if (consensus_quarters.length >= 2) {
+      point.ntm_consensus = consensus_quarters.reduce((a,b)=>a+b,0) / consensus_quarters.length * 4;
+      point.ntm_consensus_partial = true;
+    }
+
+    if (point.ntm && point.ntm > 0) {
+      point.forward_pe_real = point.price / point.ntm;
+      point.implied_cagr_real = impliedCagr(point.price, point.ntm, irr, years, exitPe);
+    }
+    if (point.ntm_consensus && point.ntm_consensus > 0) {
+      point.forward_pe_consensus = point.price / point.ntm_consensus;
+      point.implied_cagr_consensus = impliedCagr(point.price, point.ntm_consensus, irr, years, exitPe);
+    }
+    // FY+1 (12-24 months forward): sum of T+5 to T+8 — captures NEXT-year run-rate
+    if (i + 8 < data.length) {
+      const fwd = [data[i+5], data[i+6], data[i+7], data[i+8]].map(epsOf);
+      if (fwd.every(x => x !== null)) point.ntm_fy1 = fwd.reduce((a,b)=>a+b, 0);
+    }
+    // FY+1 consensus
+    const cqFy1 = [];
+    for (let k = 5; k <= 8; k++) {
+      if (data[i+k] && data[i+k].consensus_eps != null) cqFy1.push(data[i+k].consensus_eps);
+    }
+    if (cqFy1.length === 4) point.ntm_fy1_consensus = cqFy1.reduce((a,b)=>a+b, 0);
+    if (point.ntm_fy1 && point.ntm_fy1 > 0) {
+      point.implied_cagr_fy1_real = impliedCagr(point.price, point.ntm_fy1, irr, years, exitPe);
+    }
+    if (point.ntm_fy1_consensus && point.ntm_fy1_consensus > 0) {
+      point.implied_cagr_fy1_consensus = impliedCagr(point.price, point.ntm_fy1_consensus, irr, years, exitPe);
+    }
+    // EPS YoY growth — quarterly EPS vs same quarter 1 year ago (4 quarters back)
+    if (i >= 4 && data[i-4].eps != null && data[i-4].eps > 0 && data[i].eps != null) {
+      point.yoy_growth = (data[i].eps - data[i-4].eps) / data[i-4].eps;
+    }
+    // Trailing realized EPS CAGR — use TTM(now) vs TTM(N years ago)
+    // Try 5y first, fall back to 3y, then 2y
+    if (point.ttm != null && point.ttm > 0) {
+      for (const years of [5, 3, 2]) {
+        const back = years * 4;
+        if (i >= back + 3) {
+          const oldTtmQs = [data[i-back-3], data[i-back-2], data[i-back-1], data[i-back]].map(d => d?.eps);
+          if (oldTtmQs.every(x => x != null && isFinite(x))) {
+            const oldTtm = oldTtmQs.reduce((a,b) => a+b, 0);
+            if (oldTtm > 0) {
+              point.realized_cagr = Math.pow(point.ttm / oldTtm, 1/years) - 1;
+              point.realized_cagr_window = years;
+              break;
+            }
+          }
+        }
+      }
+    }
+    // Back-compat aliases
+    point.forward_pe = point.forward_pe_real;
+    point.implied_cagr = point.implied_cagr_real;
+    return point;
+  }).map((point, i, arr) => {
+    // Acceleration: change in YoY growth vs prior quarter's YoY growth
+    if (i >= 1 && point.yoy_growth !== undefined && arr[i-1].yoy_growth !== undefined) {
+      point.growth_accel = point.yoy_growth - arr[i-1].yoy_growth;
+    }
+    return point;
+  });
+}
+
+function onDatasetChange() {
+  const choice = document.getElementById('ts_dataset').value;
+  const csvBox = document.getElementById('custom_csv_box');
+  if (choice === 'custom') {
+    csvBox.style.display = 'block';
+    return;
+  }
+  csvBox.style.display = 'none';
+  tsData = QUARTERLY_DATA[choice];
+  updateSlider();
+  renderTimeSeries();
+}
+
+function parseCustomCsv() {
+  const raw = document.getElementById('custom_csv').value.trim();
+  const lines = raw.split('\n').filter(l => l.trim());
+  const parsed = [];
+  // Detect header row (skip if it has letters in fields where we expect numbers)
+  let startIdx = 0;
+  if (lines.length && /^[a-z]/i.test(lines[0].split(',')[2] || '')) {
+    startIdx = 1; // header row, skip
+  }
+  for (let i = startIdx; i < lines.length; i++) {
+    const parts = lines[i].split(',').map(s => s.trim());
+    if (parts.length < 4) continue;
+    const [q, date, price, eps, consensus_eps] = parts;
+    const row = { q, date, price: parseFloat(price), eps: parseFloat(eps) };
+    if (consensus_eps && !isNaN(parseFloat(consensus_eps))) {
+      row.consensus_eps = parseFloat(consensus_eps);
+    }
+    parsed.push(row);
+  }
+  if (parsed.length < 5) {
+    alert("Need at least 5 quarterly data points");
+    return;
+  }
+  tsData = parsed;
+  updateSlider();
+  renderTimeSeries();
+}
+
+function updateSlider() {
+  const slider = document.getElementById('cursor_slider');
+  // Cap cursor at last quarter with actual EPS (forward estimate quarters are computation-only)
+  let lastActual = tsData.length - 1;
+  for (let i = tsData.length - 1; i >= 0; i--) {
+    if (tsData[i].eps != null) { lastActual = i; break; }
+  }
+  slider.max = lastActual;
+  slider.value = Math.floor(lastActual * 2 / 3);
+}
+
+function renderTimeSeries() {
+  const irr = parseFloat(document.getElementById('irr').value) / 100;
+  const years = parseInt(document.getElementById('years').value);
+  const exitPe = parseFloat(document.getElementById('exit_pe').value);
+  const cursorIdx = parseInt(document.getElementById('cursor_slider').value);
+
+  tsComputed = computeTimeSeries(tsData, irr, years, exitPe);
+  const pointsReal = tsComputed.filter(p => p.implied_cagr_real !== undefined && isFinite(p.implied_cagr_real));
+  const pointsCons = tsComputed.filter(p => p.implied_cagr_consensus !== undefined && isFinite(p.implied_cagr_consensus));
+  const pointsEpsReal = tsComputed.filter(p => p.ntm !== undefined && isFinite(p.ntm));
+  const pointsEpsCons = tsComputed.filter(p => p.ntm_consensus !== undefined && isFinite(p.ntm_consensus));
+  if (pointsReal.length < 2) {
+    document.getElementById('ts_chart').innerHTML = '<text x="20" y="40" fill="#999">Need more quarters of data (TTM + NTM)</text>';
+    return;
+  }
+
+  // Cursor label
+  const cursorPoint = tsData[cursorIdx];
+  document.getElementById('cursor_label').textContent = `${cursorPoint.q} (${cursorPoint.date})`;
+
+  // Chart dimensions
+  const svg = document.getElementById('ts_chart');
+  const w = svg.clientWidth || 800;
+  const h = 380;
+  const m = { top: 20, right: 60, bottom: 60, left: 60 };
+  const pw = w - m.left - m.right;
+  const ph = h - m.top - m.bottom;
+
+  // Domains — combine real + consensus + FY+1
+  const pointsFy1Pre = tsComputed.filter(p => p.implied_cagr_fy1_real !== undefined && isFinite(p.implied_cagr_fy1_real));
+  const allCagrs = [...pointsReal.map(p => p.implied_cagr_real), ...pointsCons.map(p => p.implied_cagr_consensus), ...pointsFy1Pre.map(p => p.implied_cagr_fy1_real)];
+  const allEps = [...pointsEpsReal.map(p => p.ntm), ...pointsEpsCons.map(p => p.ntm_consensus)];
+  const minC = Math.min(...allCagrs, 0);
+  const maxC = Math.max(...allCagrs, 0.3);
+  const minP = 0;
+  const maxP = Math.max(...allEps, 1) * 1.1;
+  const n = tsComputed.length;
+
+  // Scales
+  const xOf = i => m.left + (i / (n - 1)) * pw;
+  const yC = v => m.top + ph - ((v - minC) / (maxC - minC)) * ph;
+  const yP = v => m.top + ph - ((v - minP) / (maxP - minP)) * ph;
+
+  // Build SVG
+  let svgHtml = '';
+
+  // Grid lines (horizontal) + left Y-axis labels (Implied CAGR %)
+  const cagrTicks = 5;
+  for (let i = 0; i <= cagrTicks; i++) {
+    const v = minC + (maxC - minC) * i / cagrTicks;
+    const y = yC(v);
+    svgHtml += `<line class="grid-line" x1="${m.left}" y1="${y}" x2="${m.left + pw}" y2="${y}"/>`;
+    svgHtml += `<text class="axis-text" x="${m.left - 8}" y="${y + 3}" text-anchor="end" style="fill: var(--accent);">${(v*100).toFixed(0)}%</text>`;
+  }
+
+  // Right Y-axis labels (Forward EPS $)
+  const epsTicks = 5;
+  for (let i = 0; i <= epsTicks; i++) {
+    const v = minP + (maxP - minP) * i / epsTicks;
+    const y = yP(v);
+    svgHtml += `<text class="axis-text" x="${m.left + pw + 8}" y="${y + 3}" text-anchor="start" style="fill: var(--yellow);">$${v.toFixed(1)}</text>`;
+  }
+
+  // X-axis ticks
+  for (let i = 0; i < n; i++) {
+    const x = xOf(i);
+    svgHtml += `<line class="axis-line" x1="${x}" y1="${m.top + ph}" x2="${x}" y2="${m.top + ph + 4}"/>`;
+    if (i % Math.max(1, Math.floor(n / 8)) === 0) {
+      svgHtml += `<text class="axis-text" x="${x}" y="${m.top + ph + 18}" text-anchor="middle">${tsData[i].q}</text>`;
+      svgHtml += `<text class="axis-text" x="${x}" y="${m.top + ph + 32}" text-anchor="middle" style="opacity: 0.6;">${tsData[i].date.slice(0,7)}</text>`;
+    }
+  }
+
+  // Axes
+  svgHtml += `<line class="axis-line" x1="${m.left}" y1="${m.top}" x2="${m.left}" y2="${m.top + ph}"/>`;
+  svgHtml += `<line class="axis-line" x1="${m.left + pw}" y1="${m.top}" x2="${m.left + pw}" y2="${m.top + ph}"/>`;
+  svgHtml += `<line class="axis-line" x1="${m.left}" y1="${m.top + ph}" x2="${m.left + pw}" y2="${m.top + ph}"/>`;
+
+  // 4 lines: CAGR-real, CAGR-consensus, EPS-real, EPS-consensus
+  // Each split at cursor: solid before, dashed after
+  function buildLine(points, yFn, valueKey, color, isConsensus) {
+    const solid = points.filter(p => p.i <= cursorIdx);
+    const dashed = points.filter(p => p.i >= cursorIdx);
+    let html = '';
+    const strokeWidth = isConsensus ? 1.5 : 2;
+    const baseOpacity = isConsensus ? 0.7 : 1;
+    if (solid.length >= 2) {
+      const pts = solid.map(p => `${xOf(p.i)},${yFn(p[valueKey])}`).join(' ');
+      html += `<polyline points="${pts}" fill="none" stroke="${color}" stroke-width="${strokeWidth}" opacity="${baseOpacity}"${isConsensus ? ' stroke-dasharray="4,2"' : ''}/>`;
+    }
+    if (dashed.length >= 2) {
+      const pts = dashed.map(p => `${xOf(p.i)},${yFn(p[valueKey])}`).join(' ');
+      html += `<polyline points="${pts}" fill="none" stroke="${color}" stroke-width="${strokeWidth}" opacity="${baseOpacity * 0.55}" stroke-dasharray="${isConsensus ? '2,3' : '6,3'}"/>`;
+    }
+    return html;
+  }
+
+  function buildDots(points, yFn, valueKey, color, isConsensus) {
+    return points.map(p => {
+      const future = p.i > cursorIdx;
+      const r = isConsensus ? (future ? 2 : 2.5) : (future ? 3 : 4);
+      const op = (isConsensus ? 0.7 : 1) * (future ? 0.6 : 1);
+      return `<circle cx="${xOf(p.i)}" cy="${yFn(p[valueKey])}" r="${r}" fill="${color}" opacity="${op}"/>`;
+    }).join('');
+  }
+
+  const COLOR_CAGR_REAL = "#4a9eff";       // bright blue
+  const COLOR_CAGR_CONS = "#a5cfff";       // light blue
+  const COLOR_EPS_REAL  = "#ffb74d";       // bright yellow
+  const COLOR_EPS_CONS  = "#ffe0a8";       // light yellow
+
+  const COLOR_CAGR_FY1 = "#c084fc";        // purple — FY+1 iCAGR
+
+  const pointsFy1 = tsComputed.filter(p => p.implied_cagr_fy1_real !== undefined && isFinite(p.implied_cagr_fy1_real));
+
+  svgHtml += buildLine(pointsReal, yC, 'implied_cagr_real', COLOR_CAGR_REAL, false);
+  svgHtml += buildLine(pointsCons, yC, 'implied_cagr_consensus', COLOR_CAGR_CONS, true);
+  svgHtml += buildLine(pointsFy1, yC, 'implied_cagr_fy1_real', COLOR_CAGR_FY1, false);
+  svgHtml += buildLine(pointsEpsReal, yP, 'ntm', COLOR_EPS_REAL, false);
+  svgHtml += buildLine(pointsEpsCons, yP, 'ntm_consensus', COLOR_EPS_CONS, true);
+
+  svgHtml += buildDots(pointsReal, yC, 'implied_cagr_real', COLOR_CAGR_REAL, false);
+  svgHtml += buildDots(pointsCons, yC, 'implied_cagr_consensus', COLOR_CAGR_CONS, true);
+  svgHtml += buildDots(pointsFy1, yC, 'implied_cagr_fy1_real', COLOR_CAGR_FY1, false);
+  svgHtml += buildDots(pointsEpsReal, yP, 'ntm', COLOR_EPS_REAL, false);
+  svgHtml += buildDots(pointsEpsCons, yP, 'ntm_consensus', COLOR_EPS_CONS, true);
+
+  // Cursor vertical line + label
+  const cursorX = xOf(cursorIdx);
+  svgHtml += `<line class="cursor-line" x1="${cursorX}" y1="${m.top}" x2="${cursorX}" y2="${m.top + ph}"/>`;
+  svgHtml += `<text class="cursor-label" x="${cursorX}" y="${m.top - 6}" text-anchor="middle">${tsData[cursorIdx].q}</text>`;
+
+  // Y-axis titles
+  svgHtml += `<text class="axis-text" x="${m.left}" y="${m.top - 6}" text-anchor="middle" style="fill: var(--accent);">Implied CAGR</text>`;
+  svgHtml += `<text class="axis-text" x="${m.left + pw}" y="${m.top - 6}" text-anchor="middle" style="fill: var(--yellow);">Forward EPS ($)</text>`;
+
+  svg.innerHTML = svgHtml;
+
+  // ===== Growth sub-chart =====
+  renderGrowthChart(tsComputed, cursorIdx);
+
+  // Render table
+  const tbody = document.getElementById('ts_tbody');
+  let tableHtml = '';
+  tsComputed.forEach((p, idx) => {
+    const isCursor = idx === cursorIdx;
+    const isFuture = idx > cursorIdx;
+    const rowClass = isCursor ? 'cursor-row' : (isFuture ? 'future-row' : '');
+    const cons_eps = (p.consensus_eps !== undefined && p.consensus_eps !== null) ? '$' + p.consensus_eps.toFixed(2) : '—';
+    const ntm_real = p.ntm ? '$' + p.ntm.toFixed(2) + (p.ntm_partial ? '*' : '') : '—';
+    const ntm_cons = p.ntm_consensus ? '$' + p.ntm_consensus.toFixed(2) + (p.ntm_consensus_partial ? '*' : '') : '—';
+    const ic_real = (p.implied_cagr_real !== undefined && isFinite(p.implied_cagr_real)) ? fmtPct(p.implied_cagr_real) : '—';
+    const ic_cons = (p.implied_cagr_consensus !== undefined && isFinite(p.implied_cagr_consensus)) ? fmtPct(p.implied_cagr_consensus) : '—';
+    const ic_fy1 = (p.implied_cagr_fy1_real !== undefined && isFinite(p.implied_cagr_fy1_real)) ? fmtPct(p.implied_cagr_fy1_real) : '—';
+    // Color FY+1 vs NTM: highlight when they diverge >3pp (means smoothing matters)
+    let ic_fy1_html = ic_fy1;
+    if (p.implied_cagr_fy1_real !== undefined && p.implied_cagr_real !== undefined &&
+        isFinite(p.implied_cagr_fy1_real) && isFinite(p.implied_cagr_real)) {
+      const gap = p.implied_cagr_fy1_real - p.implied_cagr_real;
+      if (Math.abs(gap) > 0.03) {
+        const color = gap < 0 ? 'var(--green)' : 'var(--red)';
+        ic_fy1_html = `<span style="color:${color};font-weight:600;">${ic_fy1}</span>`;
+      }
+    }
+    // Realized CAGR (with window label)
+    const realized = (p.realized_cagr !== undefined && isFinite(p.realized_cagr))
+      ? `${fmtPct(p.realized_cagr)} <span style="opacity:.6;font-size:10px;">(${p.realized_cagr_window}y)</span>`
+      : '—';
+    // Δ = Implied (use real if available, else consensus) − Realized
+    let delta_html = '—';
+    if (p.realized_cagr !== undefined && isFinite(p.realized_cagr)) {
+      const implied = (p.implied_cagr_real !== undefined && isFinite(p.implied_cagr_real))
+        ? p.implied_cagr_real
+        : (p.implied_cagr_consensus !== undefined && isFinite(p.implied_cagr_consensus) ? p.implied_cagr_consensus : null);
+      if (implied !== null) {
+        const delta = implied - p.realized_cagr;
+        let color = 'var(--text-dim)';
+        let arrow = '';
+        if (delta > 0.05) { color = 'var(--red)'; arrow = ' ↑'; }
+        else if (delta < -0.05) { color = 'var(--green)'; arrow = ' ↓'; }
+        const src = (p.implied_cagr_real !== undefined && isFinite(p.implied_cagr_real)) ? '' : '<span style="opacity:.6;font-size:10px;">(cons)</span>';
+        delta_html = `<span style="color:${color};font-weight:600;">${fmtPct(delta)}${arrow}</span> ${src}`;
+      }
+    }
+    tableHtml += `<tr class="${rowClass}">
+      <td>${p.q}${isCursor ? ' ←' : ''}</td>
+      <td>${p.date}</td>
+      <td>$${p.price.toFixed(2)}</td>
+      <td>$${p.eps.toFixed(2)}</td>
+      <td>${cons_eps}</td>
+      <td>${ntm_real}</td>
+      <td style="color: var(--text-dim);">${ntm_cons}</td>
+      <td>${ic_real}</td>
+      <td style="color: var(--text-dim);">${ic_cons}</td>
+      <td style="color: #c084fc;">${ic_fy1_html}</td>
+      <td>${realized}</td>
+      <td>${delta_html}</td>
+    </tr>`;
+  });
+  tbody.innerHTML = tableHtml;
+}
+
+function renderGrowthChart(computed, cursorIdx) {
+  const svg = document.getElementById('ts_growth_chart');
+  if (!svg) return;
+  const w = svg.clientWidth || 800;
+  const h = 220;
+  const m = { top: 20, right: 60, bottom: 50, left: 60 };
+  const pw = w - m.left - m.right;
+  const ph = h - m.top - m.bottom;
+  const n = computed.length;
+
+  const growthPts = computed.filter(p => p.yoy_growth !== undefined && isFinite(p.yoy_growth));
+  const accelPts = computed.filter(p => p.growth_accel !== undefined && isFinite(p.growth_accel));
+  if (growthPts.length < 2) {
+    svg.innerHTML = '<text x="20" y="40" fill="#999" font-size="11">Need ≥5 quarters for YoY growth</text>';
+    return;
+  }
+
+  const allVals = [...growthPts.map(p => p.yoy_growth), ...accelPts.map(p => p.growth_accel)];
+  let minV = Math.min(...allVals, -0.2);
+  let maxV = Math.max(...allVals, 0.5);
+  // Cap extreme outliers to keep chart readable (NVDA early data has +1274% YoY)
+  // Use the median + 3 IQRs as soft cap so most data is well-visible
+  const sorted = [...allVals].sort((a,b) => a-b);
+  const q1 = sorted[Math.floor(sorted.length * 0.25)];
+  const q3 = sorted[Math.floor(sorted.length * 0.75)];
+  const iqr = q3 - q1;
+  const softMax = q3 + 2 * iqr;
+  const softMin = q1 - 2 * iqr;
+  if (maxV > softMax) maxV = Math.min(maxV, Math.max(softMax, 2.0));
+  if (minV < softMin) minV = Math.max(minV, Math.min(softMin, -1.0));
+  // Padding
+  const pad = (maxV - minV) * 0.1;
+  minV -= pad; maxV += pad;
+
+  const xOf = i => m.left + (i / (n - 1)) * pw;
+  const yV = v => m.top + ph - ((v - minV) / (maxV - minV)) * ph;
+
+  let html = '';
+
+  // Clip-path so lines/dots that exceed chart bounds get cut at chart edge
+  html += `<defs><clipPath id="growth_clip"><rect x="${m.left}" y="${m.top}" width="${pw}" height="${ph}"/></clipPath></defs>`;
+
+  // Horizontal grid + Y labels (%)
+  const ticks = 5;
+  for (let i = 0; i <= ticks; i++) {
+    const v = minV + (maxV - minV) * i / ticks;
+    const y = yV(v);
+    html += `<line class="grid-line" x1="${m.left}" y1="${y}" x2="${m.left + pw}" y2="${y}"/>`;
+    html += `<text class="axis-text" x="${m.left - 8}" y="${y + 3}" text-anchor="end">${(v*100).toFixed(0)}%</text>`;
+  }
+
+  // Zero line if 0 is in range
+  if (minV < 0 && maxV > 0) {
+    const y0 = yV(0);
+    html += `<line class="zero-line" x1="${m.left}" y1="${y0}" x2="${m.left + pw}" y2="${y0}"/>`;
+    html += `<text class="axis-text" x="${m.left + pw + 4}" y="${y0 + 3}" text-anchor="start">0</text>`;
+  }
+
+  // X-axis ticks (sparse)
+  for (let i = 0; i < n; i++) {
+    const x = xOf(i);
+    if (i % Math.max(1, Math.floor(n / 8)) === 0) {
+      html += `<text class="axis-text" x="${x}" y="${m.top + ph + 16}" text-anchor="middle">${computed[i].q}</text>`;
+    }
+  }
+
+  // Axis frame
+  html += `<line class="axis-line" x1="${m.left}" y1="${m.top}" x2="${m.left}" y2="${m.top + ph}"/>`;
+  html += `<line class="axis-line" x1="${m.left}" y1="${m.top + ph}" x2="${m.left + pw}" y2="${m.top + ph}"/>`;
+
+  // Build line with solid before cursor, dashed after — clipped to chart bounds
+  function buildLineGrowth(points, valueKey, color) {
+    const solid = points.filter(p => p.i <= cursorIdx);
+    const dashed = points.filter(p => p.i >= cursorIdx);
+    let h = '';
+    if (solid.length >= 2) {
+      const pts = solid.map(p => `${xOf(p.i)},${yV(p[valueKey])}`).join(' ');
+      h += `<polyline points="${pts}" fill="none" stroke="${color}" stroke-width="2" clip-path="url(#growth_clip)"/>`;
+    }
+    if (dashed.length >= 2) {
+      const pts = dashed.map(p => `${xOf(p.i)},${yV(p[valueKey])}`).join(' ');
+      h += `<polyline points="${pts}" fill="none" stroke="${color}" stroke-width="2" opacity="0.6" stroke-dasharray="6,3" clip-path="url(#growth_clip)"/>`;
+    }
+    return h;
+  }
+  function buildDotsGrowth(points, valueKey, color) {
+    return points.map(p => {
+      const future = p.i > cursorIdx;
+      const yVal = yV(p[valueKey]);
+      // If point is way off the visible chart area, draw a triangle indicator at the boundary
+      if (yVal < m.top - 4 || yVal > m.top + ph + 4) {
+        const arrowY = yVal < m.top ? m.top + 4 : m.top + ph - 4;
+        const arrow = yVal < m.top ? '▲' : '▼';
+        return `<text x="${xOf(p.i)}" y="${arrowY + 4}" text-anchor="middle" fill="${color}" font-size="11" opacity="${future ? 0.6 : 1}">${arrow}</text>`;
+      }
+      return `<circle cx="${xOf(p.i)}" cy="${yVal}" r="${future ? 2.5 : 3.5}" fill="${color}" opacity="${future ? 0.6 : 1}"/>`;
+    }).join('');
+  }
+
+  const COLOR_GROWTH = "#4dd982";  // green
+  const COLOR_ACCEL = "#c084fc";   // purple
+
+  html += buildLineGrowth(growthPts, 'yoy_growth', COLOR_GROWTH);
+  html += buildLineGrowth(accelPts, 'growth_accel', COLOR_ACCEL);
+  html += buildDotsGrowth(growthPts, 'yoy_growth', COLOR_GROWTH);
+  html += buildDotsGrowth(accelPts, 'growth_accel', COLOR_ACCEL);
+
+  // Cursor line
+  const cursorX = xOf(cursorIdx);
+  html += `<line class="cursor-line" x1="${cursorX}" y1="${m.top}" x2="${cursorX}" y2="${m.top + ph}"/>`;
+
+  // Y-axis title
+  html += `<text class="axis-text" x="${m.left}" y="${m.top - 6}" text-anchor="middle">YoY Growth / ΔΔ</text>`;
+
+  svg.innerHTML = html;
+}
+
+// Initialize time-series view
+updateSlider();
+renderTimeSeries();
+
+// Re-render time-series when RDCF params change
+['irr', 'years', 'exit_pe'].forEach(id => {
+  document.getElementById(id).addEventListener('input', renderTimeSeries);
+});
+
+compute();
+</script>
+</body>
+</html>
