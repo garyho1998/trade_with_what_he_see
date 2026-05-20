@@ -1,0 +1,44 @@
+# Python bytecode
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+
+# Virtual envs
+venv/
+.venv/
+env/
+
+# Local market-data state — regenerable, not personal/PII but large
+market_data/market.db
+market_data/market.db-*
+market_data/warm.log
+market_data/logs/
+market_data/scans/*.tickers.json
+
+# Caches from individual skills (legacy JSON cache dirs)
+.config/forward-rdcf/cache/
+.config/minervini-screener/cache/
+
+# Secrets — NEVER commit these
+.env
+*.env
+.env.*
+!.env.example
+
+# OS / editor noise
+.DS_Store
+*.swp
+*.swo
+.idea/
+.vscode/
+
+# OS / pip
+*.egg-info/
+build/
+dist/
+
+# Generated test outputs
+/tmp/
+benchmark_*.json
+eval_set*.json

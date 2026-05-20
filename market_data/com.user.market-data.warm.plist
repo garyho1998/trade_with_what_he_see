@@ -1,0 +1,59 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN"
+        "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+    <key>Label</key>
+    <string>com.user.market-data.warm</string>
+
+    <!-- The python venv binary + the warm script. Use absolute paths
+         since launchd jobs don't inherit a shell environment. -->
+    <key>ProgramArguments</key>
+    <array>
+        <string>/Users/garyho/.config/market_data/venv/bin/python</string>
+        <string>/Users/garyho/.config/market_data/warm_watchlist.py</string>
+    </array>
+
+    <!-- Saturday 09:00 local time (HKT for Gary). launchd uses machine local time.
+         Weekday: 0=Sun, 1=Mon, ..., 6=Sat -->
+    <key>StartCalendarInterval</key>
+    <dict>
+        <key>Weekday</key>
+        <integer>6</integer>
+        <key>Hour</key>
+        <integer>9</integer>
+        <key>Minute</key>
+        <integer>0</integer>
+    </dict>
+
+    <!-- If the laptop was asleep at fire time, run as soon as it wakes -->
+    <key>RunAtLoad</key>
+    <false/>
+    <key>StartOnMount</key>
+    <false/>
+
+    <!-- Capture stdout/stderr in case the script crashes before logger init -->
+    <key>StandardOutPath</key>
+    <string>/Users/garyho/.config/market_data/logs/launchd.stdout.log</string>
+    <key>StandardErrorPath</key>
+    <string>/Users/garyho/.config/market_data/logs/launchd.stderr.log</string>
+
+    <!-- Throttle: if the job exits within 60s, wait that long before re-running -->
+    <key>ThrottleInterval</key>
+    <integer>60</integer>
+
+    <!-- Path is empty by default for launchd jobs; explicitly set so the script
+         can find /usr/bin/env etc. (we use absolute paths to avoid this matter
+         but it's a safety net). -->
+    <key>EnvironmentVariables</key>
+    <dict>
+        <key>PATH</key>
+        <string>/usr/local/bin:/usr/bin:/bin:/opt/homebrew/bin</string>
+        <!-- To enable FMP data, either uncomment + set FMP_API_KEY here,
+             or put it in ~/.config/market_data/.env (chmod 600).
+             warm_watchlist.py loads the .env file if present. -->
+        <!-- <key>FMP_API_KEY</key>
+             <string>your-key-here</string> -->
+    </dict>
+</dict>
+</plist>
